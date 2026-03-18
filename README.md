@@ -12,30 +12,32 @@
 [contributor-shield]:https://img.shields.io/github/contributors/sailpoint-oss/repo-template?label=Contributors
 [contributors-url]:https://github.com/sailpoint-oss/repo-template/graphs/contributors
 
-# application-title-here
+# Neovim ISC Plugin
 [Explore the docs »](https://your-link-to-colab-topic-here)
 
 [New to the CoLab? Click here »](https://developer.sailpoint.com/discuss/t/about-the-sailpoint-developer-community-colab/11230)
 
-<!-- CONTRIBUTING -->
-## Contributing
+## Overview
+This is a Neovim plugin for working with SailPoint Identity Security Cloud without leaving the editor. It provides a sidebar resource browser, global search, multi-tenant support, and direct JSON editing for common ISC resources such as sources, transforms, roles, access profiles, workflows, connector rules, and related objects. The plugin is designed for developers and administrators who prefer a keyboard-driven workflow and want fast access to tenant configuration and resource management inside Neovim.
 
-Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
-
-If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag `enhancement`.
-Don't forget to give the project a star! Thanks again!
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+## Requirements
+Neovim 0.9.0 or newer
+Node.js 16.x or newer
+npm for backend dependency installation
+plenary.nvim installed in Neovim
+A SailPoint ISC tenant with Personal Access Token credentials
+Supported desktop keychain integration for secure secret storage through keytar
+## Guide
+Install the plugin with your preferred Neovim plugin manager and run :SPIInstall to install backend dependencies.
+Restart Neovim and run :UpdateRemotePlugins. Open the sidebar with :SetSail, then add a tenant with :SailPointAdd tenant.
+Once configured, you can browse cached resources, search across object types, open items as JSON buffers, and save changes with :w or :SailPointSave.
+The plugin detects the appropriate save behavior automatically for supported resource types and stores PAT credentials securely in the system keychain.
 
 <!-- LICENSE -->
-## License
+### License
 
 Distributed under the MIT License. See `LICENSE.txt` for more information.
 
 <!-- CONTACT -->
-## Discuss
+### Discuss
 [Click Here](https://developer.sailpoint.com/dicuss/tag/{tagName}) to discuss this tool with other users.
