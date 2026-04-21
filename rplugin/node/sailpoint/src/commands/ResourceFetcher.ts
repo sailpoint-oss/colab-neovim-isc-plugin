@@ -19,11 +19,41 @@ type FetchFn = (
     activeTenantIndex: number,
     query?: string,
     limit?: number,
-    onProgress?: ProgressHandler
+    onProgress?: ProgressHandler,
+    subId?: string
 ) => Promise<FetcherResponse>;
 
 export class ResourceFetcher {
     constructor(private readonly tenantService: TenantService) {}
+
+    private asArrayItems(payload: unknown): ResourceItem[] {
+        if (Array.isArray(payload)) return payload as ResourceItem[];
+        if (payload && typeof payload === 'object') {
+            const directKeys = ['data', 'items', 'schemas', 'provisioningPolicies', 'results', 'objects'] as const;
+            for (const key of directKeys) {
+                const value = (payload as Record<string, unknown>)[key];
+                if (Array.isArray(value)) return value as ResourceItem[];
+            }
+            const data = (payload as { data?: unknown }).data;
+            if (Array.isArray(data)) return data as ResourceItem[];
+            const items = (payload as { items?: unknown }).items;
+            if (Array.isArray(items)) return items as ResourceItem[];
+        }
+        return [];
+    }
+
+    private async fetchFirstList(client: ISCClient, paths: string[]): Promise<ResourceItem[]> {
+        for (const path of paths) {
+            try {
+                const response = await client.getResource(path);
+                const items = this.asArrayItems(response);
+                if (items.length > 0) return items;
+            } catch {
+                // Try next candidate endpoint/version.
+            }
+        }
+        return [];
+    }
 
     private getErrorMessage(error: unknown): string {
         return error instanceof Error ? error.message : String(error);
@@ -80,13 +110,36 @@ export class ResourceFetcher {
     }
 
     private buildRegistryFetchers(): Record<string, FetchFn> {
-        const loadByType: Record<string, (c: ISCClient, limit?: number) => Promise<ResourceItem[]>> = {
-            sources: async (c, limit) => (await c.getSources(limit)) as unknown as ResourceItem[],
+        const loadByType: Record<string, (c: ISCClient, limit?: number, subId?: string) => Promise<ResourceItem[]>> = {
+            sources: async (c, limit, subId) => {
+                if (subId) {
+                    const base = (await c.getSourceById(subId)) as unknown as ResourceItem;
+                    const schemas = await this.fetchFirstList(c, [
+                        `/v3/sources/${subId}/schemas`,
+                        `/beta/sources/${subId}/schemas`
+                    ]);
+                    const provisioningPolicies = await this.fetchFirstList(c, [
+                        `/v3/sources/${subId}/provisioning-policies`,
+                        `/beta/sources/${subId}/provisioning-policies`
+                    ]);
+                    return [{ ...base, schemas, provisioningPolicies }];
+                }
+                return (await c.getSources(limit)) as unknown as ResourceItem[];
+            },
             transforms: async (c, limit) => (await c.getTransforms(limit)) as unknown as ResourceItem[],
-            rules: async (c, limit) => (await c.getConnectorRules(limit)) as unknown as ResourceItem[],
-            workflows: async (c, limit) => (await c.getWorflows(limit)) as unknown as ResourceItem[],
+            rules: async (c, limit, subId) => {
+                if (subId) return [(await c.getConnectorRuleById(subId)) as unknown as ResourceItem];
+                return (await c.getConnectorRules(limit)) as unknown as ResourceItem[];
+            },
+            workflows: async (c, limit, subId) => {
+                if (subId) return [(await c.getWorflow(subId)) as unknown as ResourceItem];
+                return (await c.getWorflows(limit)) as unknown as ResourceItem[];
+            },
             apps: async (c, limit) => (await c.getPaginatedApplications('', limit)).data as unknown as ResourceItem[],
-            entitlements: async (c, limit) => (await c.listEntitlements(undefined, limit)) as unknown as ResourceItem[],
+            entitlements: async (c, limit, subId) => {
+                if (subId) return [(await c.getEntitlement(subId)) as unknown as ResourceItem];
+                return (await c.listEntitlements(undefined, limit)) as unknown as ResourceItem[];
+            },
             campaigns: async (c, limit) => (await c.getPaginatedCampaigns('', limit)).data as unknown as ResourceItem[],
             'service-desk': async (c, limit) => (await c.getServiceDesks(limit)) as unknown as ResourceItem[],
             'identity-profiles': async (c, limit) => (await c.getIdentityProfiles(limit)) as unknown as ResourceItem[],
@@ -101,9 +154,11 @@ export class ResourceFetcher {
             const loader = loadByType[resource.id];
             if (!loader) continue;
             if (policy.mode === 'fallback' && policy.endpoint) {
-                generated[resource.id] = this.createFallbackFetcher(resourceType, policy.endpoint, loader);
+                generated[resource.id] = async (client, version, _activeTenantIndex, _query, limit, _onProgress, subId) =>
+                    this.fetchAndCount(client, resourceType, () => this.fetchWithFallback(client, () => loader(client, limit, subId), buildVersionedPath(version, policy.endpoint!)));
             } else if (policy.mode === 'simple') {
-                generated[resource.id] = this.createSimpleCountFetcher(resourceType, loader);
+                generated[resource.id] = async (client, _version, _activeTenantIndex, _query, limit, _onProgress, subId) =>
+                    this.fetchAndCount(client, resourceType, () => loader(client, limit, subId));
             }
         }
         return generated;
@@ -111,7 +166,11 @@ export class ResourceFetcher {
 
     private readonly fetchers: Record<string, FetchFn> = {
         ...this.buildRegistryFetchers(),
-        accounts: async (c, _v, __, ___, limit, onProgress) => {
+        accounts: async (c, _v, __, ___, limit, onProgress, subId) => {
+            if (subId) {
+                const items = await c.getAccountsForSource(subId, onProgress);
+                return { items: items as unknown as ResourceItem[], totalCount: items.length };
+            }
             const items = limit ? await c.listAccounts(limit) : await c.getAllAccounts((count, sourceName) => onProgress?.(count, sourceName));
             return this.fetchAndCount(c, 'accounts', async () => items as unknown as ResourceItem[]);
         },
@@ -162,12 +221,12 @@ export class ResourceFetcher {
         }
     };
 
-    public async fetchItemsInternal(type: string, getClient: () => { client: ISCClient, version: string }, activeTenantIndex: number, query?: string, limit?: number, onProgress?: ProgressHandler): Promise<FetcherResponse> {
+    public async fetchItemsInternal(type: string, getClient: () => { client: ISCClient, version: string }, activeTenantIndex: number, query?: string, limit?: number, onProgress?: ProgressHandler, subId?: string): Promise<FetcherResponse> {
         try {
             const { client, version } = getClient();
             const fetcher = this.fetchers[type];
             if (fetcher) {
-                return await fetcher(client, version, activeTenantIndex, query, limit, onProgress);
+                return await fetcher(client, version, activeTenantIndex, query, limit, onProgress, subId);
             }
         } catch (e: unknown) {
             logError(`Fetch error for ${type}:`, e);

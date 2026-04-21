@@ -43,6 +43,17 @@ function M.handle_click(node, render_callback)
 			actions.fetch_source_accounts(node.id, render_callback)
 		end
 		render_callback()
+	elseif node.type == "source_item" then
+		config.sidebar_state.expanded_sources[node.id] = not config.sidebar_state.expanded_sources[node.id]
+		if config.sidebar_state.expanded_sources[node.id] then
+			actions.fetch_source_details(node.id, render_callback)
+		end
+		render_callback()
+	elseif node.type == "source_folder" then
+		config.sidebar_state.expanded_source_folders[node.id] = not config.sidebar_state.expanded_source_folders[node.id]
+		render_callback()
+	elseif node.type == "source_sub_item" then
+		actions.open_source_sub_item(node)
 	elseif node.type == "more" then
 		-- Load all items from backend cache
 		config.fully_expanded[node.id] = true

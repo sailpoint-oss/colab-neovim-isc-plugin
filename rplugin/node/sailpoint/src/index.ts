@@ -153,6 +153,10 @@ export default function(plugin: NvimPlugin) {
                 matchedField,
                 typeof targetWinId === 'number' ? targetWinId : undefined
             );
+            
+            // Store the primary path in a buffer variable for saving sub-resources
+            const buffer = await plugin.nvim.buffer;
+            await buffer.setVar('sailpoint_path', primaryPath);
         } catch (e: any) {
             handleError(plugin.nvim, e, 'fetching ' + (type || 'resource'));
         }

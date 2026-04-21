@@ -49,6 +49,7 @@ interface CachePersistContext {
     tenantId: string;
     type: string;
     limit: number | undefined;
+    subId?: string;
     totalCount: number;
     items: ItemRecord[];
     globalStorage: GlobalStorageLike;
@@ -58,7 +59,10 @@ interface CachePersistContext {
 type CacheReader = (ctx: CacheReadContext) => Promise<FetchResponse | undefined>;
 type CachePersistor = (ctx: CachePersistContext) => Promise<void>;
 
-const defaultReadCache: CacheReader = async ({ type, limit, tenantId, ttl, globalStorage, tenantCache }) => {
+const defaultReadCache: CacheReader = async ({ type, limit, subId, tenantId, ttl, globalStorage, tenantCache }) => {
+    if (subId) {
+        return undefined;
+    }
     if (limit === 10) {
         const key = `${tenantId}_${RESOURCE_CACHE_PREFIX}${type}`;
         const cached = globalStorage.getWithTimestamp<ItemRecord[]>(key);
@@ -136,7 +140,10 @@ const CACHE_READERS: Record<string, CacheReader> = {
 };
 
 const persistDefaultCache: CachePersistor = async (params) => {
-    const { tenantId, type, limit, totalCount, items, globalStorage, tenantCache } = params;
+    const { tenantId, type, limit, subId, totalCount, items, globalStorage, tenantCache } = params;
+    if (subId) {
+        return;
+    }
     if (limit === 10) {
         await globalStorage.update(`${tenantId}_${RESOURCE_CACHE_PREFIX}${type}`, items);
         await globalStorage.updateRaw(`${tenantId}_${RESOURCE_CACHE_PREFIX}${type}_total`, totalCount);
