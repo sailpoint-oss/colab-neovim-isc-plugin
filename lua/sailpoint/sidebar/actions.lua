@@ -59,6 +59,30 @@ function M.fetch_source_accounts(source_id, render_callback)
 	vim.defer_fn(render_callback, 100)
 end
 
+function M.fetch_source_details(source_id, render_callback)
+	local ok, result = pcall(vim.fn.SailPointFetchItems, "sources", nil, nil, source_id)
+	if ok and type(result) == "table" and result.items and #result.items > 0 then
+		local full_source = result.items[1]
+		for _, source in ipairs(result.items) do
+			if source.id == source_id then
+				full_source = source
+				break
+			end
+		end
+		if type(config.raw_cache.sources) == "table" then
+			for i, source in ipairs(config.raw_cache.sources) do
+				if source.id == source_id then
+					config.raw_cache.sources[i] = full_source
+					break
+				end
+			end
+		end
+	end
+	if render_callback then
+		render_callback()
+	end
+end
+
 function M.fetch_all(resource_type, render_callback)
 	-- SPIFetchAll doesn't accept arguments - it fetches everything
 	utils.run_user_command("SPIFetchAll", {})
@@ -91,6 +115,31 @@ function M.open_or_focus_item(node)
 	end
 
 	actions.open_resource(node.resource_type, node.id, matched_field)
+end
+
+function M.open_source_sub_item(node)
+	if not node or not node.source_id or not node.id or not node.sub_type then
+		return
+	end
+
+	local tenant = vim.fn.SailPointGetActiveTenant()
+	local version = tenant and type(tenant) == "table" and tenant.version or "v3"
+
+	local path = ""
+	local type_label = ""
+	if node.sub_type == "schemas" then
+		path = string.format("/%s/sources/%s/schemas/%s", version, node.source_id, node.id)
+		type_label = "schema"
+	elseif node.sub_type == "policies" then
+		path = string.format("/%s/sources/%s/provisioning-policies/%s", version, node.source_id, node.id)
+		type_label = "provisioning-policy"
+	end
+
+	if path ~= "" then
+		local window_manager = require("sailpoint.ui.window_manager")
+		local target_win = window_manager.ensure_non_sidebar_target_window()
+		vim.fn.SailPointRawWithFallback(path, path, type_label, node.id, "", target_win)
+	end
 end
 
 return M

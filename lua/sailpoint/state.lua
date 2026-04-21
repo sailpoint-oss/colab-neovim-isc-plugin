@@ -7,7 +7,7 @@ local state = {
 	raw_cache = {},
 	total_counts = {},
 	fully_expanded = { search_groups = {} },
-	sidebar_state = { expanded = {}, expanded_sources = {}, search_expanded_groups = {} },
+	sidebar_state = { expanded = {}, expanded_sources = {}, expanded_source_folders = {}, search_expanded_groups = {} },
 	sidebar_nodes = {},
 	is_active = false,
 	all_types = {},

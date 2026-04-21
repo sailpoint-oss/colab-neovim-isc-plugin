@@ -68,7 +68,7 @@ export function registerFetchItemsHandler(deps: Deps) {
                 if (cached) return cached;
             }
 
-            const result = await resourceFetcher.fetchItemsInternal(type, getClient, getActiveTenantIndex(), query, limit);
+            const result = await resourceFetcher.fetchItemsInternal(type, getClient, getActiveTenantIndex(), query, limit, undefined, subId);
             if (tenantId !== 'default' && result && result.items) {
                 const sorted = sortItems([...result.items]);
                 const unique = dedupeItems(sorted);
@@ -77,6 +77,7 @@ export function registerFetchItemsHandler(deps: Deps) {
                         tenantId,
                         type,
                         limit,
+                        subId,
                         totalCount: result.totalCount,
                         items: unique,
                         globalStorage,

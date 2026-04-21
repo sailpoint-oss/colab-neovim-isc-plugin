@@ -23,7 +23,9 @@ export class SaveCommand {
                 try { 
                     await client.patchResource(path, patchOps); 
                 } catch (e: any) {
-                    if (!e.message?.includes('404')) throw e;
+                    const statusStr = e.message || String(e);
+                    const isUnsupported = statusStr.includes('404') || statusStr.includes('405') || statusStr.includes('415');
+                    if (!isUnsupported) throw e;
                     await client.updateResource(path, JSON.stringify(fullData));
                 }
             };
@@ -44,6 +46,11 @@ export class SaveCommand {
                 if (id) await saveWithFallbacks(`/${version}/sources/${id}`, fastJsonPatch.compare(JSON.parse(originalStr), newContent), newContent);
             } else if (type === 'workflow') {
                 await saveWithFallbacks(`/${version}/workflows/${id}`, fastJsonPatch.compare(JSON.parse(originalStr), newContent), newContent);
+            } else if (type === 'provisioning-policy' || type === 'schema') {
+                const path = await buffer.getVar('sailpoint_path') as string;
+                if (path) {
+                    await saveWithFallbacks(path, fastJsonPatch.compare(JSON.parse(originalStr), newContent), newContent);
+                }
             }
 
             await buffer.setVar('sailpoint_original', JSON.stringify(newContent));
